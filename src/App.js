@@ -69,7 +69,7 @@ const SERVICES = ["CAC Business Registration","Tax Registration (TIN/VAT)","Tax 
  function printDoc(title,content,docType){
    const w=window.open("","_blank");
    if(!w){alert("Allow pop-ups to export."); return;}
-   w.document.write("<!DOCTYPE html><html><head><meta charset=utf-8><title>${title}</title><style>@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=IBM+Plex+Mono:wght@400;600&display=swap');*{box-sizing:border-box;margin:0;padding:0}body{font-family:'IBM Plex Mono',monospace;padding:64px 72px;color:#0a0a0a;max-width:740px;margin:0 auto}.firm{font-family:'Playfair Display',serif;font-size:26px;letter-spacing:6px;font-weight:700;margin-bottom:4px}.tag{font-size:10px;letter-spacing:3px;color:#888;text-transform:uppercase;margin-bottom:32px}hr{border:none;border-top:2px solid #0a0a0a;margin:22px 0}.dtype{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-bottom:24px}pre{font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.85;white-space:pre-wrap;word-break:break-word}.foot{margin-top:48px;font-size:10px;color:#bbb;border-top:1px solid #e0ddd5;padding-top:12px}.pbtn{margin-bottom:24px;background:#0a0a0a;color:#fff;border:none;padding:7px 18px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border-radius:2px}@media print{.pbtn{display:none}}</style></head><body><button class=pbtn onclick=window.print()>Save as PDF</button><div class=firm>TZADDY</div><div class=tag>Accounting · Tax · Advisory</div><hr><div class=dtype>${docType}</div><pre>${content}</pre><div class=foot>Tzaddy Consulting · Ibadan, Nigeria · CAC Accredited · QuickBooks Online Accountant</div></body></html>");
+   w.document.write("<!DOCTYPE html><html><head><meta charset=utf-8><title>"${title}"</title><style>@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=IBM+Plex+Mono:wght@400;600&display=swap');*{box-sizing:border-box;margin:0;padding:0}body{font-family:'IBM Plex Mono',monospace;padding:64px 72px;color:#0a0a0a;max-width:740px;margin:0 auto}.firm{font-family:'Playfair Display',serif;font-size:26px;letter-spacing:6px;font-weight:700;margin-bottom:4px}.tag{font-size:10px;letter-spacing:3px;color:#888;text-transform:uppercase;margin-bottom:32px}hr{border:none;border-top:2px solid #0a0a0a;margin:22px 0}.dtype{font-size:10px;letter-spacing:3px;text-transform:uppercase;color:#888;margin-bottom:24px}pre{font-family:'IBM Plex Mono',monospace;font-size:13px;line-height:1.85;white-space:pre-wrap;word-break:break-word}.foot{margin-top:48px;font-size:10px;color:#bbb;border-top:1px solid #e0ddd5;padding-top:12px}.pbtn{margin-bottom:24px;background:#0a0a0a;color:#fff;border:none;padding:7px 18px;font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;border-radius:2px}@media print{.pbtn{display:none}}</style></head><body><button class=pbtn onclick=window.print()>Save as PDF</button><div class=firm>TZADDY</div><div class=tag>Accounting · Tax · Advisory</div><hr><div class=dtype>${docType}</div><pre>${content}</pre><div class=foot>Tzaddy Consulting · Ibadan, Nigeria · CAC Accredited · QuickBooks Online Accountant</div></body></html>");
    w.document.close();
  }
  
@@ -518,7 +518,7 @@ const SERVICES = ["CAC Business Registration","Tax Registration (TIN/VAT)","Tax 
    };
  
    const sl=["Client","Services","Fees","Confirm"];
-   return(<Modal title={"New Engagement — Step ${step} of 4} onClose={onClose} width{600}"}>
+   return(<Modal title={"New Engagement — Step "${step}" of 4} "onClose={onClose} width{600}""}>
      <div style={{display:"flex",gap:"4px",marginBottom:"24px"}}>
        {sl.map((l,i)=>(
          <div key={l} style={{flex:1,textAlign:"center"}}>
@@ -778,7 +778,7 @@ const SERVICES = ["CAC Business Registration","Tax Registration (TIN/VAT)","Tax 
          <ResponsiveContainer width="100%" height={200}>
            <BarChart data={mData} barGap={2}>
              <XAxis dataKey="month" tick={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fill:"#999"}} axisLine={false} tickLine={false}/>
-             <YAxis tick={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fill:"#999"}} tickFormatter={v=>"N${(v/1000).toFixed(0)}k"} axisLine={false} tickLine={false} width={55}/>
+             <YAxis tick={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fill:"#999"}} tickFormatter={v=>N${(v/1000).toFixed(0)}k} axisLine={false} tickLine={false} width={55}/>
              <Tooltip content={<TT/>}/>
              <Bar dataKey="received" name="Received" fill="#0a0a0a" radius={[2,2,0,0]}/>
              <Bar dataKey="warehoused" name="Warehoused" fill="#bbb" radius={[2,2,0,0]}/>
@@ -796,7 +796,7 @@ const SERVICES = ["CAC Business Registration","Tax Registration (TIN/VAT)","Tax 
            {sData.length===0?<Empty msg="No data."/>:(
              <ResponsiveContainer width="100%" height={220}>
                <BarChart data={sData} layout="vertical" margin={{left:0,right:20}}>
-                 <XAxis type="number" tick={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fill:"#999"}} tickFormatter={v=>"N${(v/1000).toFixed(0)}k"} axisLine={false} tickLine={false}/>
+                 <XAxis type="number" tick={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fill:"#999"}} tickFormatter={v=>N${(v/1000).toFixed(0)}k} axisLine={false} tickLine={false}/>
                  <YAxis type="category" dataKey="name" tick={{fontSize:9,fontFamily:"'IBM Plex Mono',monospace",fill:"#666"}} axisLine={false} tickLine={false} width={90}/>
                  <Tooltip content={<TT/>}/>
                  <Bar dataKey="value" name="Fee" radius={[0,2,2,0]}>
