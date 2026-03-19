@@ -518,7 +518,7 @@ const SERVICES = ["CAC Business Registration","Tax Registration (TIN/VAT)","Tax 
    };
  
    const sl=["Client","Services","Fees","Confirm"];
-   return(<Modal title={"New Engagement — Step `${step} of 4`"} onClose={onClose} width={600}>
+   return(<Modal title={"New Engagement — Step 1 of 4"} onClose={onClose} width={600}>
      <div style={{display:"flex",gap:"4px",marginBottom:"24px"}}>
        {sl.map((l,i)=>(
          <div key={l} style={{flex:1,textAlign:"center"}}>
