@@ -30,6 +30,76 @@ const SERVICE_TASKS = {
   "Business Advisory / CFO":["Conduct business assessment","Prepare analysis/advisory report","Present findings to client","Implement agreed recommendations","Post-implementation review"],
   "Others":["Define scope with client","Execute engagement","Deliver output to client"]
 };
+// ─── MONTHLY FILING TRACKER ────────────────────────────────────────────────────
+
+const FILING_OBLIGATIONS = ["VAT", "PAYE", "WHT"];
+
+const FILING_STATUSES = [
+  "Not Started",
+  "Data Requested",
+  "Data Received",
+  "Computed",
+  "Reviewed",
+  "Filed",
+  "Confirmed"
+];
+
+const FILING_DUE_DAYS = {
+  VAT: 21,
+  PAYE: 10,
+  WHT: 21
+};
+
+const FILING_MONTHS = [
+  { key: "2026-07", label: "Jul-26" },
+  { key: "2026-08", label: "Aug-26" },
+  { key: "2026-09", label: "Sep-26" },
+  { key: "2026-10", label: "Oct-26" },
+  { key: "2026-11", label: "Nov-26" },
+  { key: "2026-12", label: "Dec-26" },
+  { key: "2027-01", label: "Jan-27" },
+  { key: "2027-02", label: "Feb-27" },
+  { key: "2027-03", label: "Mar-27" },
+  { key: "2027-04", label: "Apr-27" },
+  { key: "2027-05", label: "May-27" },
+  { key: "2027-06", label: "Jun-27" }
+];
+
+const FILING_STATUS_COLORS = {
+  "Not Started": ["#f0ede5", "#888"],
+  "Data Requested": ["#fffbea", "#9a7000"],
+  "Data Received": ["#e8f4fd", "#1a6ba0"],
+  "Computed": ["#f1eafa", "#7046a3"],
+  "Reviewed": ["#edfaee", "#2e7d32"],
+  "Filed": ["#e8f4fd", "#1a6ba0"],
+  "Confirmed": ["#0a0a0a", "#fff"]
+};
+
+const filingDueDate = (monthKey, obligation) => {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, FILING_DUE_DAYS[obligation]);
+};
+
+const daysUntilDue = (monthKey, obligation) => {
+  const due = filingDueDate(monthKey, obligation);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.ceil((due - today) / 86400000);
+};
+
+const isFilingEscalation = (status, monthKey, obligation) => {
+  const days = daysUntilDue(monthKey, obligation);
+  return (
+    (status === "Not Started" || status === "Data Requested") &&
+    days <= 5 &&
+    days >= 0
+  );
+};
+
+const isFilingOverdue = (status, monthKey, obligation) => {
+  return status !== "Confirmed" &&
+         daysUntilDue(monthKey, obligation) < 0;
+};
 
 // ─── LOCAL STORAGE (for clients, engagements, payments — non-PDF data) ────────
 const ls = {
@@ -326,15 +396,662 @@ export default function TzaddyPM() {
           </nav>
         </header>
         <main style={{padding:"24px",maxWidth:"1080px",margin:"0 auto"}}>
-          {nav==="dash"     && <Dash     {...ctx}/>}
-          {nav==="clients"  && <Clients  {...ctx}/>}
-          {nav==="pipeline" && <Pipeline {...ctx}/>}
-          {nav==="payments" && <Payments {...ctx}/>}
-          {nav==="jobs"     && <Jobs     {...ctx}/>}
-          {nav==="reports"  && <Reports  {...ctx}/>}
+         {nav==="dash"     && <Dash     {...ctx}/>}
+        {nav==="clients"  && <Clients  {...ctx}/>}
+        {nav==="pipeline" && <Pipeline {...ctx}/>}
+        {nav==="filings"  && <FilingTracker clients={clients}/>}
+        {nav==="payments" && <Payments {...ctx}/>}
+        {nav==="jobs"     && <Jobs     {...ctx}/>}
+        {nav==="reports"  && <Reports  {...ctx}/>}
         </main>
       </div>
     </>
+  );
+}
+// ─── FILING TRACKER ───────────────────────────────────────────────────────────
+
+function FilingStatusBadge({ status }) {
+  const [bg, color] =
+    FILING_STATUS_COLORS[status] || ["#f0f0f0", "#333"];
+
+  return (
+    <span
+      style={{
+        background: bg,
+        color,
+        padding: "3px 7px",
+        borderRadius: "2px",
+        fontSize: "9px",
+        fontWeight: "600",
+        letterSpacing: "0.3px",
+        whiteSpace: "nowrap"
+      }}
+    >
+      {status}
+    </span>
+  );
+}
+
+function FilingTracker({ clients }) {
+  const [records, setRecords] = useState([]);
+  const [filterClient, setFilterClient] = useState("All");
+  const [filterObligation, setFilterObligation] = useState("All");
+  const [filterStatus, setFilterStatus] = useState("All");
+  const [filterResponsible, setFilterResponsible] = useState("All");
+  const [selectedMonth, setSelectedMonth] = useState("2026-09");
+
+  useEffect(() => {
+    const saved = ls.get("tz_filing_tracker", []);
+
+    if (saved.length) {
+      setRecords(saved);
+      return;
+    }
+
+    const initial = [];
+
+    clients.forEach(client => {
+      FILING_OBLIGATIONS.forEach(obligation => {
+        initial.push({
+          id: uid(),
+          clientId: client.id,
+          clientName: client.name,
+          obligation,
+          dueDay: FILING_DUE_DAYS[obligation],
+          responsible: "",
+          months: Object.fromEntries(
+            FILING_MONTHS.map(m => [
+              m.key,
+              {
+                status: "Not Started",
+                updatedAt: null,
+                filedAt: null,
+                confirmedAt: null,
+                notes: ""
+              }
+            ])
+          )
+        });
+      });
+    });
+
+    setRecords(initial);
+  }, [clients]);
+
+  useEffect(() => {
+    ls.set("tz_filing_tracker", records);
+  }, [records]);
+
+  // Add new clients to the tracker automatically
+  useEffect(() => {
+    if (!clients.length) return;
+
+    setRecords(prev => {
+      const next = [...prev];
+
+      clients.forEach(client => {
+        const exists = next.some(r => r.clientId === client.id);
+
+        if (!exists) {
+          FILING_OBLIGATIONS.forEach(obligation => {
+            next.push({
+              id: uid(),
+              clientId: client.id,
+              clientName: client.name,
+              obligation,
+              dueDay: FILING_DUE_DAYS[obligation],
+              responsible: "",
+              months: Object.fromEntries(
+                FILING_MONTHS.map(m => [
+                  m.key,
+                  {
+                    status: "Not Started",
+                    updatedAt: null,
+                    filedAt: null,
+                    confirmedAt: null,
+                    notes: ""
+                  }
+                ])
+              )
+            });
+          });
+        }
+      });
+
+      return next;
+    });
+  }, [clients]);
+
+  const updateRecord = (id, patch) => {
+    setRecords(prev =>
+      prev.map(r =>
+        r.id === id ? { ...r, ...patch } : r
+      )
+    );
+  };
+
+  const updateMonth = (id, monthKey, patch) => {
+    setRecords(prev =>
+      prev.map(r => {
+        if (r.id !== id) return r;
+
+        return {
+          ...r,
+          months: {
+            ...r.months,
+            [monthKey]: {
+              ...r.months[monthKey],
+              ...patch,
+              updatedAt: Date.now()
+            }
+          }
+        };
+      })
+    );
+  };
+
+  const allStatuses = [
+    "All",
+    ...FILING_STATUSES
+  ];
+
+  const responsiblePeople = [
+    "All",
+    ...Array.from(
+      new Set(
+        records
+          .map(r => r.responsible)
+          .filter(Boolean)
+      )
+    )
+  ];
+
+  const filtered = records.filter(r => {
+    if (
+      filterClient !== "All" &&
+      r.clientId !== filterClient
+    ) return false;
+
+    if (
+      filterObligation !== "All" &&
+      r.obligation !== filterObligation
+    ) return false;
+
+    if (
+      filterResponsible !== "All" &&
+      r.responsible !== filterResponsible
+    ) return false;
+
+    if (
+      filterStatus !== "All" &&
+      r.months[selectedMonth]?.status !== filterStatus
+    ) return false;
+
+    return true;
+  });
+
+  const monthRecords = records.map(r => ({
+    ...r,
+    month: r.months[selectedMonth]
+  }));
+
+  const total = monthRecords.length;
+
+  const confirmed = monthRecords.filter(
+    r => r.month?.status === "Confirmed"
+  ).length;
+
+  const overdue = monthRecords.filter(
+    r =>
+      r.month &&
+      isFilingOverdue(
+        r.month.status,
+        selectedMonth,
+        r.obligation
+      )
+  ).length;
+
+  const escalations = monthRecords.filter(
+    r =>
+      r.month &&
+      isFilingEscalation(
+        r.month.status,
+        selectedMonth,
+        r.obligation
+      )
+  ).length;
+
+  const completion =
+    total > 0
+      ? Math.round((confirmed / total) * 100)
+      : 0;
+
+  return (
+    <div>
+
+      <PageTitle>
+        Monthly Filing Tracker
+      </PageTitle>
+
+      {/* SUMMARY */}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(4,1fr)",
+          gap: "12px",
+          marginBottom: "20px"
+        }}
+      >
+        {[
+          ["Total Filings", total],
+          ["Confirmed", confirmed],
+          ["Overdue", overdue],
+          ["Escalations", escalations]
+        ].map(([label, value]) => (
+          <div
+            key={label}
+            style={{
+              background: "#fff",
+              border: "1px solid #e0ddd5",
+              borderRadius: "3px",
+              padding: "18px 20px"
+            }}
+          >
+            <div
+              style={{
+                fontSize: "9px",
+                letterSpacing: "2px",
+                textTransform: "uppercase",
+                color: "#999",
+                marginBottom: "8px"
+              }}
+            >
+              {label}
+            </div>
+
+            <div
+              style={{
+                fontFamily: "'Playfair Display',serif",
+                fontSize: "24px",
+                fontWeight: "700"
+              }}
+            >
+              {value}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* COMPLETION */}
+
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid #e0ddd5",
+          padding: "16px 20px",
+          marginBottom: "20px"
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            fontSize: "10px",
+            textTransform: "uppercase",
+            letterSpacing: "1.5px",
+            color: "#777",
+            marginBottom: "8px"
+          }}
+        >
+          <span>
+            {FILING_MONTHS.find(m => m.key === selectedMonth)?.label}
+            {" "}Completion
+          </span>
+
+          <strong>{completion}%</strong>
+        </div>
+
+        <div
+          style={{
+            height: "6px",
+            background: "#eee",
+            borderRadius: "3px"
+          }}
+        >
+          <div
+            style={{
+              height: "100%",
+              width: `${completion}%`,
+              background: "#0a0a0a",
+              borderRadius: "3px",
+              transition: "width .2s"
+            }}
+          />
+        </div>
+      </div>
+
+      {/* FILTERS */}
+
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1.3fr 1fr 1fr 1fr 1fr",
+          gap: "8px",
+          marginBottom: "15px"
+        }}
+      >
+
+        <TS
+          value={selectedMonth}
+          onChange={setSelectedMonth}
+        >
+          {FILING_MONTHS.map(m => (
+            <option key={m.key} value={m.key}>
+              {m.label}
+            </option>
+          ))}
+        </TS>
+
+        <TS
+          value={filterClient}
+          onChange={setFilterClient}
+        >
+          <option value="All">All Clients</option>
+          {clients.map(c => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </TS>
+
+        <TS
+          value={filterObligation}
+          onChange={setFilterObligation}
+        >
+          <option value="All">All Obligations</option>
+          {FILING_OBLIGATIONS.map(o => (
+            <option key={o} value={o}>
+              {o}
+            </option>
+          ))}
+        </TS>
+
+        <TS
+          value={filterResponsible}
+          onChange={setFilterResponsible}
+        >
+          {responsiblePeople.map(p => (
+            <option key={p} value={p}>
+              {p === "All" ? "All Responsible" : p}
+            </option>
+          ))}
+        </TS>
+
+        <TS
+          value={filterStatus}
+          onChange={setFilterStatus}
+        >
+          {allStatuses.map(s => (
+            <option key={s} value={s}>
+              {s === "All" ? "All Statuses" : s}
+            </option>
+          ))}
+        </TS>
+
+      </div>
+
+      {/* TRACKER */}
+
+      <div
+        style={{
+          background: "#fff",
+          border: "1px solid #e0ddd5",
+          borderRadius: "3px",
+          overflowX: "auto"
+        }}
+      >
+
+        {filtered.length === 0 ? (
+          <Empty msg="No filing records match these filters." />
+        ) : (
+
+          <table
+            style={{
+              width: "100%",
+              minWidth: "1050px",
+              borderCollapse: "collapse",
+              fontSize: "11px"
+            }}
+          >
+
+            <thead>
+              <tr style={{ background: "#fafaf7" }}>
+
+                {[
+                  "Client",
+                  "Obligation",
+                  "Due",
+                  "Responsible",
+                  "Status",
+                  "Deadline",
+                  "Action"
+                ].map(h => (
+                  <th
+                    key={h}
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 12px",
+                      fontSize: "9px",
+                      letterSpacing: "1.3px",
+                      textTransform: "uppercase",
+                      color: "#999",
+                      borderBottom: "1px solid #e0ddd5",
+                      whiteSpace: "nowrap"
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+
+              </tr>
+            </thead>
+
+            <tbody>
+
+              {filtered.map(record => {
+
+                const month =
+                  record.months[selectedMonth];
+
+                const escalation =
+                  isFilingEscalation(
+                    month.status,
+                    selectedMonth,
+                    record.obligation
+                  );
+
+                const overdue =
+                  isFilingOverdue(
+                    month.status,
+                    selectedMonth,
+                    record.obligation
+                  );
+
+                return (
+                  <tr
+                    key={record.id}
+                    style={{
+                      background:
+                        overdue
+                          ? "#fff5f5"
+                          : escalation
+                          ? "#fffbf0"
+                          : "#fff"
+                    }}
+                  >
+
+                    <td
+                      style={{
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #f0ede5",
+                        fontWeight: "600"
+                      }}
+                    >
+                      {record.clientName}
+                    </td>
+
+                    <td
+                      style={{
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #f0ede5"
+                      }}
+                    >
+                      <span
+                        style={{
+                          background: "#f0ede5",
+                          padding: "3px 7px",
+                          borderRadius: "2px"
+                        }}
+                      >
+                        {record.obligation}
+                      </span>
+                    </td>
+
+                    <td
+                      style={{
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #f0ede5"
+                      }}
+                    >
+                      {record.dueDay}
+                    </td>
+
+                    <td
+                      style={{
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #f0ede5",
+                        minWidth: "150px"
+                      }}
+                    >
+                      <input
+                        value={record.responsible || ""}
+                        onChange={e =>
+                          updateRecord(
+                            record.id,
+                            {
+                              responsible:
+                                e.target.value
+                            }
+                          )
+                        }
+                        placeholder="Assign"
+                        style={{
+                          ...inp,
+                          width: "140px"
+                        }}
+                      />
+                    </td>
+
+                    <td
+                      style={{
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #f0ede5",
+                        minWidth: "170px"
+                      }}
+                    >
+                      <select
+                        value={month.status}
+                        onChange={e =>
+                          updateMonth(
+                            record.id,
+                            selectedMonth,
+                            {
+                              status: e.target.value,
+                              ...(e.target.value === "Filed"
+                                ? { filedAt: Date.now() }
+                                : {}),
+                              ...(e.target.value === "Confirmed"
+                                ? { confirmedAt: Date.now() }
+                                : {})
+                            }
+                          )
+                        }
+                        style={{
+                          ...inp,
+                          fontSize: "10px"
+                        }}
+                      >
+                        {FILING_STATUSES.map(status => (
+                          <option
+                            key={status}
+                            value={status}
+                          >
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+
+                    <td
+                      style={{
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #f0ede5",
+                        whiteSpace: "nowrap"
+                      }}
+                    >
+                      {overdue ? (
+                        <span style={{ color: "#b52a2a", fontWeight: "600" }}>
+                          OVERDUE
+                        </span>
+                      ) : escalation ? (
+                        <span style={{ color: "#9a7000", fontWeight: "600" }}>
+                          ⚠ ESCALATE
+                        </span>
+                      ) : (
+                        <span style={{ color: "#777" }}>
+                          {dt(filingDueDate(
+                            selectedMonth,
+                            record.obligation
+                          ))}
+                        </span>
+                      )}
+                    </td>
+
+                    <td
+                      style={{
+                        padding: "10px 12px",
+                        borderBottom: "1px solid #f0ede5"
+                      }}
+                    >
+                      <FilingStatusBadge
+                        status={month.status}
+                      />
+                    </td>
+
+                  </tr>
+                );
+              })}
+
+            </tbody>
+          </table>
+
+        )}
+
+      </div>
+
+      <div
+        style={{
+          marginTop: "12px",
+          fontSize: "10px",
+          color: "#999"
+        }}
+      >
+        VAT: due on or before the 21st · PAYE: due on or before
+        the 10th · WHT: due on or before the 21st.
+      </div>
+
+    </div>
   );
 }
 
