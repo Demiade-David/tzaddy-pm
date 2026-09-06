@@ -1690,10 +1690,11 @@ function Payments({clients,engagements,payments,addPay,updPay}) {
   };
 
   // Load all payment PDFs on mount
-  useEffect(() => {
-    payments.forEach(p => loadPayDoc(p.id));
-  }, [payments.length]);
-
+  // Load all payment PDFs on mount / when payments change
+useEffect(() => {
+  payments.forEach(p => loadPayDoc(p.id));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [payments]);
   const rec = () => {
     if (!f.amount) return alert("Enter amount.");
     const payId = uid();
