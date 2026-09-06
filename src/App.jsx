@@ -375,7 +375,15 @@ export default function TzaddyPM() {
   );
 
   const ctx  = {clients,engagements,payments,addClient,delClient,addEng,updEng,delEng,addPay,updPay};
-  const TABS = [["dash","Dashboard"],["clients","Clients"],["pipeline","Pipeline"],["payments","Payments"],["jobs","Jobs"],["reports","Reports"]];
+ const TABS = [
+  ["dash","Dashboard"],
+  ["clients","Clients"],
+  ["pipeline","Pipeline"],
+  ["filings","Filings"],
+  ["payments","Payments"],
+  ["jobs","Jobs"],
+  ["reports","Reports"]
+];
 
   return (
     <>
